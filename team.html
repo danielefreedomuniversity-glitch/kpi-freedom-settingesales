@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KPI Team — Freedom University</title>
+<style>
+:root{
+  --bg:#0C0F13; --surface:#14181E; --surface-2:#1A2029; --raise:#20262F;
+  --ink:#EDF1F6; --ink-2:#A9B4C0; --ink-3:#6B7684;
+  --line:#262E38; --line-2:#1E252E;
+  --adv:#5C8DFF; --set:#F0A63C; --clo:#C08DF0; --eco:#3ECF8E;
+  --ok:#3ECF8E; --warn:#F0A63C; --bad:#FF6D5E; --mute:#6B7684;
+  --sans:"Inter","Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:13px;line-height:1.45;
+  -webkit-font-smoothing:antialiased}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+a{color:inherit}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:40;background:rgba(12,15,19,.92);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line-2)}
+.hrow{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  padding:14px 22px 12px}
+.brand h1{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.sub{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-top:3px;font-weight:600}
+.controls{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.ctl{display:flex;flex-direction:column;gap:3px}
+.ctl label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+select,.btn,input[type=month],input[type=number],input[type=password]{font-family:var(--sans);font-size:12px;border-radius:4px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--ink);padding:7px 10px;outline:none}
+select:focus,input:focus{border-color:var(--adv)}
+.btn{cursor:pointer;font-weight:600;text-decoration:none;display:inline-block}
+.btn:hover{background:var(--raise)}
+.btn.solid{background:var(--adv);border-color:transparent;color:#0A1020;font-weight:700}
+.btn.solid:hover{filter:brightness(1.08)}
+.btn.sec{background:transparent}
+
+/* ---------- layout a tutto schermo ---------- */
+.full{padding:16px 22px 40px;display:grid;grid-template-columns:minmax(0,1fr) 332px;gap:16px;align-items:start}
+@media (max-width:1240px){.full{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line-2);border-radius:8px;overflow:hidden}
+
+/* ---------- barre di sezione ---------- */
+.phead{padding:16px 18px 12px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.peyebrow{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.ptitle{font-size:19px;font-weight:800;margin-top:2px;letter-spacing:-.01em}
+.pmeta{font-size:11px;color:var(--ink-2);margin-top:4px}
+.secbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 18px;border-top:1px solid var(--line-2);
+  border-bottom:1px solid var(--line-2);background:var(--surface-2)}
+.secbar .t{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:700;margin-right:2px}
+.vtab{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:7px 14px;border-radius:4px;
+  border:1px solid var(--line);background:transparent;color:var(--ink-3);cursor:pointer;font-family:inherit}
+.vtab[aria-pressed="true"].vclo{background:var(--clo);color:#0A1020;border-color:transparent}
+.vtab[aria-pressed="true"].vset{background:var(--set);color:#0A1020;border-color:transparent}
+.fchip{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:5px 10px;border-radius:3px;
+  border:1px solid var(--line);background:transparent;color:var(--ink-3);cursor:pointer;font-family:inherit}
+.fchip[aria-pressed="true"]{background:var(--eco);color:#0A1020;border-color:transparent}
+.fchip.conf[aria-pressed="true"]{background:var(--adv)}
+.fchip.fog[aria-pressed="true"]{background:var(--warn)}
+
+/* ---------- tiles ---------- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line-2)}
+.tile{background:var(--surface);padding:12px 16px}
+.tile .tl{font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.tile .tv{font-size:20px;font-weight:800;margin-top:3px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tile .ts{font-size:10px;color:var(--ink-3);margin-top:2px}
+.tile.aset .tv{color:var(--set)} .tile.aclo .tv{color:var(--clo)} .tile.aeco .tv{color:var(--eco)}
+
+/* ---------- tabella team ---------- */
+.twrap{overflow-x:auto}
+table.team{border-collapse:collapse;width:100%;min-width:1080px}
+.team th{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);font-weight:700;
+  padding:8px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.team th:first-child{text-align:left;padding-left:18px}
+.team th.gset{box-shadow:inset 0 3px 0 var(--set)}
+.team th.gclo{box-shadow:inset 0 3px 0 var(--clo)}
+.team th.geco{box-shadow:inset 0 3px 0 var(--eco)}
+.team td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line-2);white-space:nowrap;
+  font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px}
+.team td:first-child{text-align:left;font-family:var(--sans);padding-left:18px}
+.team tr.lv0>td{background:var(--surface)}
+.team tr.lv0>td:first-child{font-weight:800;font-size:13px;cursor:pointer}
+.team tr.lv1>td{background:var(--surface-2);color:var(--ink-2)}
+.team tr.lv1>td:first-child{padding-left:34px;cursor:pointer;font-weight:600;font-size:12px}
+.team tr.lv2>td{color:var(--ink-3);font-size:11.5px}
+.team tr.lv2>td:first-child{padding-left:52px;font-size:11px}
+.team tr.tot>td{background:var(--raise);font-weight:800;color:var(--ink);border-top:2px solid var(--line)}
+.team tr.tot>td:first-child{font-family:var(--sans)}
+.caret{display:inline-block;width:14px;color:var(--ink-3);transition:transform .12s}
+.open>td .caret{transform:rotate(90deg)}
+.zero{color:var(--ink-3);opacity:.55}
+.fb{font-size:8px;vertical-align:super;opacity:.8}
+.cv{display:block;font-size:9.5px;color:var(--ink-3);font-family:var(--mono)}
+td.mm{background:rgba(255,109,94,.10)!important;box-shadow:inset 2px 0 0 var(--bad)}
+td.mok .cv{color:var(--ok)}
+.bar{height:4px;border-radius:2px;background:var(--raise);margin-top:4px;overflow:hidden;min-width:70px}
+.bar i{display:block;height:100%;background:var(--eco)}
+.bar.low i{background:var(--bad)} .bar.mid i{background:var(--warn)}
+.chip{display:inline-block;font-size:8.5px;font-weight:800;letter-spacing:.08em;padding:2px 7px;border-radius:3px}
+.chip.ok{background:rgba(62,207,142,.15);color:var(--ok)}
+.chip.ko{background:rgba(255,109,94,.15);color:var(--bad)}
+
+/* ---------- sidebar classifiche ---------- */
+.side{display:flex;flex-direction:column;gap:16px;position:sticky;top:86px}
+.card{background:var(--surface);border:1px solid var(--line-2);border-radius:8px;overflow:hidden}
+.card .ch{padding:12px 16px 10px;border-bottom:1px solid var(--line-2);display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.card .ch .t{font-size:10px;letter-spacing:.15em;text-transform:uppercase;font-weight:800}
+.card .ch .s{font-size:9.5px;color:var(--ink-3)}
+.card.cclo .ch .t{color:var(--clo)} .card.cset .ch .t{color:var(--set)} .card.cobi .ch .t{color:var(--eco)}
+.rk{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line-2)}
+.rk:last-child{border-bottom:none}
+.rk .pos{width:26px;text-align:center;font-size:14px}
+.rk .pos.n{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.rk .who{flex:1;min-width:0}
+.rk .who b{display:block;font-size:12.5px}
+.rk .who span{font-size:10px;color:var(--ink-3);font-family:var(--mono)}
+.rk .val{text-align:right}
+.rk .val b{display:block;font-family:var(--mono);font-size:13px}
+.rk .val span{font-size:9.5px;color:var(--ink-3)}
+.rk.first{background:linear-gradient(90deg,rgba(240,166,60,.10),transparent)}
+.obj{padding:12px 16px;border-bottom:1px solid var(--line-2)}
+.obj:last-child{border-bottom:none}
+.obj .ol{display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px}
+.obj .ol b{font-family:var(--mono)}
+.foot{padding:14px 22px 30px;font-size:11px;color:var(--ink-3);max-width:1100px}
+.foot b{color:var(--ink-2)}
+
+/* ---------- modali (come il Funnel) ---------- */
+.ov{position:fixed;inset:0;background:rgba(5,7,10,.72);display:none;align-items:flex-start;justify-content:center;
+  padding:48px 16px;z-index:60;overflow:auto}
+.ov.on{display:flex}
+.modal{background:var(--surface);border:1px solid var(--line);border-radius:8px;width:100%;max-width:640px}
+.modal h2{font-size:14px;font-weight:800;padding:14px 18px;border-bottom:1px solid var(--line-2)}
+.mbody{padding:16px 18px;font-size:12.5px;color:var(--ink-2)}
+.mbody b{color:var(--ink)}
+.mfoot{padding:12px 18px;border-top:1px solid var(--line-2);display:flex;justify-content:flex-end;gap:8px}
+.prow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line-2)}
+.prow label{color:var(--ink)}
+.prow input{width:130px;text-align:right;font-family:var(--mono)}
+textarea{width:100%;height:170px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;
+  color:var(--ink);font-family:var(--mono);font-size:11px;padding:10px;outline:none;resize:vertical}
+.impmsg{margin-top:10px;font-size:11.5px;color:var(--ink-2);white-space:pre-wrap;font-family:var(--mono)}
+.mmrow{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line-2);font-family:var(--mono);font-size:11.5px}
+.mmrow .d{color:var(--bad);font-weight:700}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:760px){ .hrow{padding:12px 14px}.full{padding:12px 14px 30px}.team th:first-child,.team td:first-child{padding-left:12px} }
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <div class="brand">
+      <h1>KPI Team — Freedom University</h1>
+      <div class="sub" id="subline"></div>
+      <div class="sub" id="syncInfo" style="color:#3ECF8E"></div>
+    </div>
+    <div class="controls">
+      <div class="ctl"><label for="mese">Mese</label>
+        <input type="month" id="mese" value="2026-10"></div>
+      <div class="ctl"><label for="wk">Periodo</label>
+        <select id="wk"><option value="ALL">Tutto il mese</option></select></div>
+      <button class="btn solid" id="bNow">Aggiorna adesso</button>
+      <button class="btn" id="bSync">Sync</button>
+      <button class="btn" id="bParam">Parametri</button>
+      <button class="btn" id="bExp">Esporta CSV</button>
+      <button class="btn" id="bJson">Backup</button>
+      <a class="btn sec" href="https://kpi-freedom-meta-sync.onrender.com" target="_blank" rel="noopener" title="Apre la dashboard del marketing (progetto separato)">↗ Funnel</a>
+    </div>
+  </div>
+</header>
+
+<div class="full">
+  <main class="panel" id="panel">
+    <div class="phead">
+      <div>
+        <div class="peyebrow" id="eyebrow">Team · —</div>
+        <div class="ptitle" id="title">Team</div>
+        <div class="pmeta" id="meta"></div>
+      </div>
+    </div>
+    <div class="secbar">
+      <button class="vtab vclo" data-v="closer" aria-pressed="true">Team Closer</button>
+      <button class="vtab vset" data-v="setter" aria-pressed="false">Team Setter</button>
+      <span style="flex:1"></span>
+      <span class="t">Fonte</span>
+      <button class="fchip"      data-f="ghl"    aria-pressed="true"  title="Dati letti da GHL (calendari, pipeline, utenti)">⚡ GHL</button>
+      <button class="fchip fog"  data-f="foglio" aria-pressed="false" title="Dati compilati dal team nei fogli Google">📄 Foglio</button>
+      <button class="fchip conf" data-f="conf"   aria-pressed="false" title="GHL e foglio affiancati: le differenze si accendono in rosso">⇄ Confronto</button>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <div class="twrap"><table class="team"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+  </main>
+
+  <aside class="side" id="side">
+    <div class="card cclo" id="cardClo">
+      <div class="ch"><span class="t">Classifica Closer</span><span class="s" id="cloSub">per incassato</span></div>
+      <div id="rankClo"></div>
+    </div>
+    <div class="card cset" id="cardSet">
+      <div class="ch"><span class="t">Classifica Setter</span><span class="s" id="setSub">per call fissate</span></div>
+      <div id="rankSet"></div>
+    </div>
+    <div class="card cobi">
+      <div class="ch"><span class="t">Obiettivi del mese</span><span class="s" id="obiSub"></span></div>
+      <div id="obiBody"></div>
+    </div>
+  </aside>
+</div>
+
+<div class="foot">
+  <b>Come si legge.</b> Ogni riga è una persona: clicca per aprire le settimane e poi i giorni. La fonte <b>⚡ GHL</b> legge
+  calendari (appuntamenti alla data dell'appuntamento), pipeline (vendite alla data vendita) e utenti; <b>📄 Foglio</b> legge
+  quello che il team compila la sera; <b>⇄ Confronto</b> li affianca e accende in rosso le celle che non coincidono — è il
+  controllo di precisione. Quando una fonte non copre una metrica, la cella usa l'altra e lo segnala con un piccolo ⚡/📄.
+  «Non fissati» è un saldo di fine giornata: nel periodo vale l'ultimo valore inserito, non la somma.
+</div>
+
+<div class="ov" id="ovParam"><div class="modal">
+  <h2>Obiettivi e soglie</h2>
+  <div class="mbody" id="paramBody"></div>
+  <div class="mfoot"><button class="btn sec" data-close>Chiudi</button><button class="btn solid" id="pSave">Salva</button></div>
+</div></div>
+
+<div class="ov" id="ovSync"><div class="modal">
+  <h2>Sincronizzazione team</h2>
+  <div class="mbody">
+    <p style="margin-bottom:10px">La pagina si aggiorna <b>da sola all'apertura e poi ogni 15 minuti</b>. Legge, per ogni persona:
+    <b>GHL</b> — utenti, appuntamenti in calendario (con esito show / no show, alla data dell'appuntamento), trattative, vendite,
+    contrattualizzato e cash (alla data vendita) — e i <b>due fogli Google</b> del team (KPI Setting e KPI Vendita), scheda per scheda.</p>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn solid" id="bNow2">Aggiorna adesso</button>
+      <span id="syncStatus" style="font-size:11px;color:var(--ink-3)"></span>
+    </div>
+    <div class="impmsg" id="syncMsg"></div>
+    <h2 style="border:none;padding:16px 0 4px;margin:0;font-size:12px">Controllo precisione — GHL vs Foglio (periodo attivo)</h2>
+    <div id="mmList" style="max-height:240px;overflow:auto"></div>
+  </div>
+  <div class="mfoot"><button class="btn sec" data-close>Chiudi</button></div>
+</div></div>
+
+<div class="ov" id="ovJson"><div class="modal">
+  <h2>Backup e ripristino</h2>
+  <div class="mbody">
+    <p style="margin-bottom:10px">Copia il testo per conservare i dati, oppure incollane uno salvato e premi Ripristina.</p>
+    <textarea id="jsonBox" spellcheck="false"></textarea>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn solid" id="jRestore">Ripristina da testo</button>
+      <button class="btn" id="jWipe" style="color:var(--bad);border-color:var(--bad)">Svuota tutto</button>
+    </div>
+  </div>
+  <div class="mfoot"><button class="btn sec" data-close>Chiudi</button></div>
+</div></div>
+
+<div class="ov" id="ovLogin"><div class="modal" style="max-width:400px">
+  <h2>KPI Freedom University</h2>
+  <div class="mbody">
+    <p style="margin-bottom:12px">Inserisci la password per accedere alla dashboard.</p>
+    <input type="password" id="pwIn" placeholder="Password" autocomplete="current-password" style="width:100%;padding:10px 12px;font-size:14px">
+    <div id="pwErr" style="margin-top:8px;font-size:12px;color:var(--bad);display:none">Password errata, riprova.</div>
+    <button class="btn solid" id="bLogin" style="margin-top:12px;width:100%;padding:10px">Entra</button>
+  </div>
+</div></div>
+
+<script>
+/* ============================================================
+   KPI TEAM — setter & closer, persona per persona
+   Fonti: GHL (calendari, pipeline, utenti) + fogli Google del team.
+   La password è la stessa del Funnel (condivisa via localStorage).
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
+const div = (a,b) => (b ? a/b : 0);
+const nf = (v,d=0)=> new Intl.NumberFormat("it-IT",{minimumFractionDigits:d,maximumFractionDigits:d}).format(v||0);
+function fmt(v,f){
+  if(v===null||v===undefined||!isFinite(v)) v=0;
+  switch(f){
+    case "eur":  return "€ "+nf(v,0);
+    case "eur2": return "€ "+nf(v,2);
+    case "pct":  return nf(v*100,1)+"%";
+    case "n1":   return nf(v,1);
+    default:     return nf(v,0);
+  }
+}
+
+/* ---------- calendario (identico al Funnel) ---------- */
+const MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+const GG = ["Dom","Lun","Mar","Mer","Gio","Ven","Sab"];
+const pad2 = n => String(n).padStart(2,"0");
+const meseLabel = m => { const [y,mm]=m.split("-"); return MESI[+mm-1]+" "+y; };
+function dayLabel(iso){ const [y,m,d]=iso.split("-").map(Number);
+  return GG[new Date(y,m-1,d).getDay()]+" "+d; }
+function calWeeks(mese){
+  const [y,m] = mese.split("-").map(Number);
+  const last = new Date(y,m,0).getDate();
+  const weeks=[]; let cur=[];
+  for(let d=1; d<=last; d++){
+    cur.push(`${y}-${pad2(m)}-${pad2(d)}`);
+    if(new Date(y,m-1,d).getDay()===0 || d===last){ weeks.push(cur); cur=[]; }
+  }
+  return weeks.map((days,i)=>({ idx:i, label:"Settimana "+(i+1),
+    sub:(+days[0].slice(8))+"–"+(+days[days.length-1].slice(8)), days }));
+}
+
+/* ---------- stato ---------- */
+const KEY = "kpi_team_v1";
+const PW_KEY = "kpi_pw";                       /* stessa password del Funnel */
+const P_DEF = { obiettivi:{ Mario:70000, Alberto:50000, Daniela:25000, Gelu:25000 },
+                obNuovo:25000, setTarget:50, setTeam:300, tolPct:2 };
+let state = { mese:(new Date()).toISOString().slice(0,7), vista:"closer", fonte:"ghl",
+              params: JSON.parse(JSON.stringify(P_DEF)), mesi:{} };
+try{ const v = localStorage.getItem(KEY);
+  if(v){ const s = JSON.parse(v);
+    state = Object.assign(state, s);
+    state.params = Object.assign(JSON.parse(JSON.stringify(P_DEF)), s.params||{});
+    state.params.obiettivi = Object.assign({}, P_DEF.obiettivi, (s.params||{}).obiettivi||{});
+  } }catch(e){}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+
+let WKS = calWeeks(state.mese);
+let filtroWk = "ALL";
+let openP = new Set(), openW = new Set();
+
+const getPw = ()=>{ try{return localStorage.getItem(PW_KEY)||"";}catch(e){return "";} };
+const setPw = v =>{ try{localStorage.setItem(PW_KEY,v);}catch(e){} };
+
+const dati = () => state.mesi[state.mese] || null;
+const cfgNames = kind => { const d=dati();
+  if(d && d.config && d.config[kind==="closer"?"closers":"setters"]) return d.config[kind==="closer"?"closers":"setters"];
+  return kind==="closer" ? ["Mario","Alberto","Daniela","Gelu"] : ["Denise","Donato","Lucas","Juliette"]; };
+
+/* ---------- colonne (g = chiave GHL · s = chiave foglio) ---------- */
+const COLS_CLOSER = [
+  {k:"lead",  l:"Lead ass.",     s:"sLead",              f:"int", grp:"set", tip:"Lead assegnati (foglio)"},
+  {k:"app",   l:"Appuntamenti",  g:"gApp",               f:"int", grp:"set", tip:"Appuntamenti in calendario GHL, alla data dell'appuntamento"},
+  {k:"show",  l:"Show/Call sv.", g:"gShow", s:"sCallSv", f:"int", grp:"set", tip:"GHL: esito Showed · Foglio: Call svolte"},
+  {k:"nosh",  l:"No show",       g:"gNoShow", s:"sNoShow", f:"int", grp:"set"},
+  {k:"shR",   l:"% Show up",     f:"pct", grp:"set", calc:(v)=> v.src==="s" ? div(v.show, v.show+v.nosh) : div(v.show, v.app||v.show+v.nosh)},
+  {k:"tratt", l:"Trattative",    g:"gTratt", s:"sTratt", f:"int", grp:"clo"},
+  {k:"vend",  l:"Vendite",       g:"gVend",  s:"sVend",  f:"int", grp:"clo"},
+  {k:"clR",   l:"% Chiusura",    f:"pct", grp:"clo", calc:(v)=> div(v.vend, v.show)},
+  {k:"perse", l:"Perse",         g:"gPerse", s:"sPerse", f:"int", grp:"clo"},
+  {k:"risch", l:"Risched.",      s:"sRisch",             f:"int", grp:"set"},
+  {k:"canc",  l:"Cancellati",    g:"gCanc",              f:"int", grp:"set"},
+  {k:"fatt",  l:"Fatturato",     g:"gFatt", s:"sFatt",   f:"eur", grp:"eco"},
+  {k:"inc",   l:"Incassato",     g:"gInc",  s:"sInc",    f:"eur", grp:"eco"},
+  {k:"tick",  l:"Ticket",        f:"eur", grp:"eco", calc:(v)=> div(v.fatt, v.vend)},
+];
+const COLS_SETTER = [
+  {k:"ass",   l:"Lead ass.",     g:"gAss",  s:"sAss",    f:"int", grp:"set"},
+  {k:"call",  l:"Chiamate",      s:"sCall",              f:"int", grp:"set"},
+  {k:"fix",   l:"Fissate",       g:"gFix",  s:"sFix",    f:"int", grp:"set", pref:"s", tip:"Primaria: foglio. In GHL solo se l'opportunità porta il campo custom «setter»"},
+  {k:"fxR",   l:"% Fiss/Chiam",  f:"pct", grp:"set", calc:(v)=> div(v.fix, v.call)},
+  {k:"nfx",   l:"Non fissati",   s:"sNonFix",            f:"int", grp:"set", saldo:true, tip:"Saldo di fine giornata: nel periodo vale l'ultimo valore"},
+  {k:"cont",  l:"Contattati",    g:"gCont",              f:"int", grp:"clo"},
+  {k:"nint",  l:"Non interess.", g:"gNonInt",            f:"int", grp:"clo"},
+  {k:"ntgt",  l:"Non in target", g:"gNonTarget",         f:"int", grp:"clo"},
+  {k:"fatt",  l:"Fatt. generato",s:"sFatt",              f:"eur", grp:"eco"},
+];
+const COLS = () => state.vista==="closer" ? COLS_CLOSER : COLS_SETTER;
+
+/* ---------- aggregazione ---------- */
+function daysOfPeriodo(){
+  const today = new Date().toISOString().slice(0,10);
+  if(filtroWk==="OGGI") return WKS.flatMap(w=>w.days).filter(d=>d===today);
+  if(filtroWk==="IERI"){ const y=new Date(Date.now()-864e5).toISOString().slice(0,10);
+    return WKS.flatMap(w=>w.days).filter(d=>d===y); }
+  if(filtroWk==="ALL") return WKS.flatMap(w=>w.days);
+  const w = WKS[+filtroWk]; return w ? w.days : WKS.flatMap(x=>x.days);
+}
+function aggDays(p, days){                      /* p.giorni → somma (saldi: ultimo valore) */
+  const o={};
+  for(const d of days){ const r=p.giorni && p.giorni[d]; if(!r) continue;
+    for(const k in r){ if(k==="sNonFix") o[k]=r[k]; else o[k]=(o[k]||0)+r[k]; } }
+  return o;
+}
+/* valore di una colonna secondo la fonte attiva; fb=1 se ha ripiegato sull'altra fonte.
+   c.pref forza la fonte primaria della singola metrica (es. le fissate dei setter
+   restano del foglio anche in modalità GHL, dove l'attribuzione è best-effort). */
+function pick(rec, c, fonte){
+  const g = c.g!=null ? (rec[c.g]||0) : null;
+  const s = c.s!=null ? (rec[c.s]||0) : null;
+  const f2 = c.pref==="s" ? "foglio" : c.pref==="g" ? "ghl" : fonte;
+  const mark = f2!==fonte ? 1 : undefined;
+  if(f2==="foglio"){ if(s!==null) return {v:s, src:"s", fb:mark}; if(g!==null) return {v:g, src:"g", fb:1}; }
+  else             { if(g!==null) return {v:g, src:"g", fb:mark}; if(s!==null) return {v:s, src:"s", fb:1}; }
+  return {v:0, src:null};
+}
+/* record "risolto" per una fonte: tutte le colonne base già scelte */
+function resolved(rec, fonte, cols){
+  cols = cols || COLS();
+  const out={src:fonte==="foglio"?"s":"g"};
+  for(const c of cols){ if(c.calc) continue; const p=pick(rec,c,fonte); out[c.k]=p.v; out["_"+c.k]=p; }
+  for(const c of cols){ if(c.calc) out[c.k]=c.calc(out); }
+  return out;
+}
+function cellVal(rec, c, fonte){
+  if(c.calc){ const r=resolved(rec,fonte); return {v:r[c.k], src:fonte==="foglio"?"s":"g"}; }
+  return pick(rec, c, fonte);
+}
+function diffBad(c, g, s){
+  if(g===null||s===null) return false;
+  if(!g && !s) return false;
+  if(c.f==="eur") { const base=Math.max(Math.abs(g),Math.abs(s)); return base && Math.abs(g-s)/base*100 > (state.params.tolPct||2); }
+  return g!==s;
+}
+
+/* ---------- render ---------- */
+function thead(){
+  const conf = state.fonte==="conf";
+  $("#thead").innerHTML = "<tr><th>"+(state.vista==="closer"?"Closer":"Setter")+"</th>"
+    + COLS().map(c=>`<th class="g${c.grp}" ${c.tip?`title="${esc(c.tip)}"`:""}>${c.l}</th>`).join("")
+    + (filtroWk==="ALL" ? `<th class="geco">${state.vista==="closer"?"vs Obiettivo €":"vs Target fiss."}</th>` : "")
+    + "</tr>";
+  return conf;
+}
+function cellHTML(rec, c){
+  const conf = state.fonte==="conf";
+  if(!conf){
+    const p = cellVal(rec, c, state.fonte);
+    const z = !p.v ? "zero" : "";
+    return `<td class="${z}">${fmt(p.v,c.f)}${p.fb?`<span class="fb">${p.src==="s"?"📄":"⚡"}</span>`:""}</td>`;
+  }
+  /* confronto: GHL sopra, foglio sotto */
+  const g = c.calc ? resolved(rec,"ghl")[c.k]    : (c.g!=null ? (rec[c.g]||0) : null);
+  const s = c.calc ? resolved(rec,"foglio")[c.k] : (c.s!=null ? (rec[c.s]||0) : null);
+  const bad = !c.calc && diffBad(c, g, s);
+  const main = g!==null ? fmt(g,c.f) : (s!==null?fmt(s,c.f):"—");
+  const sub  = (g!==null && s!==null) ? `<span class="cv">📄 ${fmt(s,c.f)}</span>`
+             : (g===null && s!==null) ? `<span class="cv">solo 📄</span>`
+             : (g!==null && c.s!=null) ? `<span class="cv">📄 —</span>` : "";
+  return `<td class="${bad?"mm":""} ${(!g&&!s)?"zero":""}">${main}${sub}</td>`;
+}
+function objCell(nome, rec){
+  if(filtroWk!=="ALL") return "";
+  if(state.vista==="closer"){
+    const ob = obiettivoDi(nome);
+    const inc = pick(rec,{g:"gInc",s:"sInc"},state.fonte==="conf"?"ghl":state.fonte).v;
+    const p = div(inc, ob);
+    const cls = p>=1?"":"low"; const mid = p>=.5&&p<1?"mid":"";
+    return `<td><span class="num">${fmt(inc,"eur")} / ${fmt(ob,"eur")}</span>
+      <div class="bar ${cls} ${mid}"><i style="width:${Math.min(100,p*100)}%"></i></div>
+      <span class="cv">${nf(p*100,0)}% dell'obiettivo</span></td>`;
+  }
+  const tgt = state.params.setTarget||50;
+  const fx = pick(rec,{g:"gFix",s:"sFix",pref:"s"},state.fonte==="conf"?"ghl":state.fonte).v;
+  const sc = fx - tgt;
+  return `<td><span class="num">${nf(fx,0)} / ${nf(tgt,0)}</span>
+    <div class="bar ${fx>=tgt?"":"low"}"><i style="width:${Math.min(100,div(fx,tgt)*100)}%"></i></div>
+    <span class="chip ${sc>=0?"ok":"ko"}">${sc>=0?"SOPRA":"SOTTO"} TARGET ${sc>=0?"+":""}${nf(sc,0)}</span></td>`;
+}
+const obiettivoDi = nome => { const o=state.params.obiettivi||{};
+  return o[nome]!=null ? +o[nome] : (state.params.obNuovo||0); };
+
+function render(){
+  WKS = calWeeks(state.mese);
+  fillWk();
+  const d = dati();
+  const people = (d ? d[state.vista==="closer"?"closer":"setter"] : cfgNames(state.vista).map(n=>({nome:n,giorni:{}}))) || [];
+  const days = daysOfPeriodo();
+  const perLabel = filtroWk==="ALL" ? "Tutto il mese" : filtroWk==="OGGI" ? "Oggi" : filtroWk==="IERI" ? "Ieri" : (WKS[+filtroWk]||{}).label;
+
+  $("#eyebrow").textContent = `Team · ${meseLabel(state.mese)} · ${perLabel}`;
+  $("#title").textContent = state.vista==="closer" ? "Team Closer" : "Team Setter";
+  const fLab = state.fonte==="ghl"?"fonte GHL":state.fonte==="foglio"?"fonte foglio":"confronto GHL ⇄ foglio";
+  $("#meta").textContent = `${people.length} ${state.vista==="closer"?"closer":"setter"} · ${fLab}`;
+  $("#subline").textContent = `${meseLabel(state.mese)} · ${cfgNames("setter").length} setter · ${cfgNames("closer").length} closer`;
+  $("#syncInfo").textContent = d && d.lastSync
+    ? `Aggiornato alle ${new Date(d.lastSync).toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"})}${d.warn&&d.warn.length?` · ${d.warn.length} avvisi (vedi Sync)`:""}`
+    : "Mai sincronizzato: premi Aggiorna adesso";
+
+  $$(".vtab").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.v===state.vista)));
+  $$(".fchip").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.f===state.fonte)));
+
+  thead();
+  const rows=[], TOT={};
+  const recDi = p => aggDays(p, days);
+  const persone = people.map(p=>({p, rec:recDi(p)}));
+
+  /* totale team: somma dei grezzi (i saldi si sommano tra persone) */
+  for(const {rec} of persone) for(const k in rec) TOT[k]=(TOT[k]||0)+rec[k];
+
+  for(const {p, rec} of persone){
+    const open = openP.has(p.nome);
+    rows.push(`<tr class="lv0 ${open?"open":""}" data-p="${esc(p.nome)}">`
+      + `<td><span class="caret">▸</span>${esc(p.nome)}</td>`
+      + COLS().map(c=>cellHTML(rec,c)).join("") + objCell(p.nome, rec) + "</tr>");
+    if(!open) continue;
+    for(const w of WKS){
+      const wdays = w.days.filter(x=>days.includes(x));
+      if(!wdays.length) continue;
+      const wrec = aggDays(p, wdays);
+      const wopen = openW.has(p.nome+"|"+w.idx);
+      rows.push(`<tr class="lv1 ${wopen?"open":""}" data-p="${esc(p.nome)}" data-w="${w.idx}">`
+        + `<td><span class="caret">▸</span>${w.label} <span style="color:var(--ink-3);font-size:10px">${w.sub}</span></td>`
+        + COLS().map(c=>cellHTML(wrec,c)).join("") + (filtroWk==="ALL"?"<td></td>":"") + "</tr>");
+      if(!wopen) continue;
+      for(const day of wdays){
+        const drec = aggDays(p,[day]);
+        rows.push(`<tr class="lv2"><td>${dayLabel(day)}</td>`
+          + COLS().map(c=>cellHTML(drec,c)).join("") + (filtroWk==="ALL"?"<td></td>":"") + "</tr>");
+      }
+    }
+  }
+  /* riga totale */
+  rows.push(`<tr class="tot"><td>Totale team</td>`
+    + COLS().map(c=>cellHTML(TOT,c)).join("")
+    + (filtroWk==="ALL" ? totObjCell(TOT) : "") + "</tr>");
+  $("#tbody").innerHTML = rows.join("");
+
+  tiles(TOT);
+  leaderboard(persone);
+  obiettivi(persone, TOT);
+}
+function totObjCell(TOT){
+  if(state.vista==="closer"){
+    const ob = cfgNames("closer").reduce((a,n)=>a+obiettivoDi(n),0);
+    const inc = pick(TOT,{g:"gInc",s:"sInc"},state.fonte==="conf"?"ghl":state.fonte).v;
+    return `<td><span class="num">${fmt(inc,"eur")} / ${fmt(ob,"eur")}</span>
+      <div class="bar ${inc>=ob?"":"low"}"><i style="width:${Math.min(100,div(inc,ob)*100)}%"></i></div></td>`;
+  }
+  const tgt = state.params.setTeam||300;
+  const fx = pick(TOT,{g:"gFix",s:"sFix",pref:"s"},state.fonte==="conf"?"ghl":state.fonte).v;
+  return `<td><span class="num">${nf(fx,0)} / ${nf(tgt,0)}</span>
+    <div class="bar ${fx>=tgt?"":"low"}"><i style="width:${Math.min(100,div(fx,tgt)*100)}%"></i></div></td>`;
+}
+
+function tiles(TOT){
+  const F = state.fonte==="conf"?"ghl":state.fonte;
+  const R = resolved(TOT, F);
+  let t=[];
+  if(state.vista==="closer"){
+    t=[ ["ASET","Appuntamenti", nf(R.app,0), "in calendario"],
+        ["ASET","Show rate", fmt(R.shR,"pct"), `${nf(R.show,0)} show · ${nf(R.nosh,0)} no show`],
+        ["ACLO","Vendite", nf(R.vend,0), `chiusura ${fmt(R.clR,"pct")}`],
+        ["AECO","Fatturato", fmt(R.fatt,"eur"), `ticket ${fmt(R.tick,"eur")}`],
+        ["AECO","Incassato", fmt(R.inc,"eur"), "cash del periodo"] ];
+  }else{
+    t=[ ["ASET","Lead assegnati", nf(R.ass,0), ""],
+        ["ASET","Chiamate", nf(R.call,0), "dal foglio"],
+        ["ASET","Fissate", nf(R.fix,0), `${fmt(R.fxR,"pct")} su chiamate`],
+        ["ACLO","Non interessati", nf(R.nint,0), `${nf(R.ntgt,0)} non in target`],
+        ["AECO","Fatt. generato", fmt(R.fatt,"eur"), "dai lead dei setter"] ];
+  }
+  $("#tiles").innerHTML = t.map(([c,l,v,s])=>`<div class="tile ${c.toLowerCase()}"><div class="tl">${l}</div><div class="tv">${v}</div><div class="ts">${s}</div></div>`).join("");
+}
+
+/* ---------- classifiche ---------- */
+function leaderboard(persone){
+  const F = state.fonte==="conf"?"ghl":state.fonte;
+  const isCl = state.vista==="closer";
+  const d = dati();
+  const altro = d ? d[isCl?"setter":"closer"] : [];
+  const days = daysOfPeriodo();
+  const cl = (isCl?persone:(altro||[]).map(p=>({p,rec:aggDays(p,days)})));
+  const st = (!isCl?persone:(altro||[]).map(p=>({p,rec:aggDays(p,days)})));
+
+  const rkClo = cl.map(({p,rec})=>{ const R = resolved(rec, F, COLS_CLOSER);
+      return {nome:p.nome, inc:R.inc, fatt:R.fatt, vend:R.vend, clR:R.clR, shR:R.shR}; })
+    .sort((a,b)=>b.inc-a.inc || b.fatt-a.fatt || b.vend-a.vend);
+  $("#rankClo").innerHTML = rkClo.map((r,i)=>rkRow(i, r.nome,
+      fmt(r.inc,"eur"), "incassato",
+      `${nf(r.vend,0)} vendite · chius. ${fmt(r.clR,"pct")} · show ${fmt(r.shR,"pct")}`,
+      filtroWk==="ALL" ? div(r.inc, obiettivoDi(r.nome)) : null)).join("")
+    || `<div class="rk"><span class="who"><span>nessun dato nel periodo</span></span></div>`;
+
+  const rkSet = st.map(({p,rec})=>{ const R = resolved(rec, F, COLS_SETTER);
+      return {nome:p.nome, fix:R.fix, call:R.call, fxR:R.fxR, ass:R.ass}; })
+    .sort((a,b)=>b.fix-a.fix || b.fxR-a.fxR);
+  $("#rankSet").innerHTML = rkSet.map((r,i)=>rkRow(i, r.nome,
+      nf(r.fix,0), "fissate",
+      `${nf(r.call,0)} chiamate · ${fmt(r.fxR,"pct")} fiss/chiam`,
+      filtroWk==="ALL" ? div(r.fix, state.params.setTarget||50) : null)).join("")
+    || `<div class="rk"><span class="who"><span>nessun dato nel periodo</span></span></div>`;
+}
+function rkRow(i, nome, val, valSub, sub, prog){
+  const medal = ["🥇","🥈","🥉"][i];
+  const bar = prog==null ? "" :
+    `<div class="bar ${prog>=1?"":prog>=.5?"mid":"low"}" style="min-width:0"><i style="width:${Math.min(100,prog*100)}%"></i></div>`;
+  return `<div class="rk ${i===0?"first":""}">
+    <span class="pos ${medal?"":"n"}">${medal||("#"+(i+1))}</span>
+    <span class="who"><b>${esc(nome)}</b><span>${sub}</span>${bar}</span>
+    <span class="val"><b>${val}</b><span>${valSub}</span></span></div>`;
+}
+function obiettivi(persone, TOT){
+  const F = state.fonte==="conf"?"ghl":state.fonte;
+  $("#obiSub").textContent = meseLabel(state.mese);
+  const d = dati(); const days = WKS.flatMap(w=>w.days);
+  const clPeople = d ? d.closer : []; const stPeople = d ? d.setter : [];
+  const incTot = (clPeople||[]).reduce((a,p)=>a+pick(aggDays(p,days),{g:"gInc",s:"sInc"},F).v,0);
+  const fattTot = (clPeople||[]).reduce((a,p)=>a+pick(aggDays(p,days),{g:"gFatt",s:"sFatt"},F).v,0);
+  const obTot = cfgNames("closer").reduce((a,n)=>a+obiettivoDi(n),0);
+  const fixTot = (stPeople||[]).reduce((a,p)=>a+pick(aggDays(p,days),{g:"gFix",s:"sFix",pref:"s"},F).v,0);
+  const tgtTeam = state.params.setTeam||300;
+  const row=(l,v,t,pf)=>{ const p=div(v,t);
+    return `<div class="obj"><div class="ol"><span>${l}</span><b>${pf(v)} / ${pf(t)}</b></div>
+      <div class="bar ${p>=1?"":p>=.5?"mid":"low"}"><i style="width:${Math.min(100,p*100)}%"></i></div>
+      <div class="ol" style="margin:4px 0 0"><span style="color:var(--ink-3)">${nf(p*100,0)}% raggiunto</span><span style="color:var(--ink-3)">mancano ${pf(Math.max(0,t-v))}</span></div></div>`; };
+  $("#obiBody").innerHTML =
+      row("Incassato team (mese)", incTot, obTot, v=>fmt(v,"eur"))
+    + row("Fatturato team (mese)", fattTot, obTot, v=>fmt(v,"eur"))
+    + row("Call fissate team (mese)", fixTot, tgtTeam, v=>nf(v,0));
+}
+
+/* ---------- confronto: elenco scostamenti ---------- */
+function mismatches(){
+  const d = dati(); if(!d) return [];
+  const days = daysOfPeriodo(); const out=[];
+  const scan = (people, cols, vista) => {
+    for(const p of people||[]){
+      const rec = aggDays(p, days);
+      for(const c of cols){
+        if(c.calc || c.g==null || c.s==null) continue;
+        const g=rec[c.g]||0, s=rec[c.s]||0;
+        if(diffBad(c,g,s)) out.push({vista, nome:p.nome, l:c.l, g, s, f:c.f});
+      }
+    }
+  };
+  scan(d.closer, COLS_CLOSER, "Closer");
+  scan(d.setter, COLS_SETTER, "Setter");
+  return out;
+}
+function renderMM(){
+  const mm = mismatches();
+  $("#mmList").innerHTML = mm.length
+    ? mm.map(x=>`<div class="mmrow"><span>${x.vista} · <b>${esc(x.nome)}</b> · ${x.l}</span>
+        <span>⚡ ${fmt(x.g,x.f)} · 📄 ${fmt(x.s,x.f)} <span class="d">Δ ${fmt(x.g-x.s,x.f)}</span></span></div>`).join("")
+    : `<div style="font-size:11.5px;color:var(--ok)">Nessuno scostamento tra GHL e fogli nel periodo. ✓</div>`;
+}
+
+/* ---------- sync ---------- */
+let syncing=false;
+async function doSync(silenzioso){
+  const pw=getPw();
+  if(!pw){ showLogin(false); return; }
+  if(syncing) return; syncing=true;
+  const y=state.mese.split("-")[0], m=state.mese.split("-")[1];
+  const since=`${y}-${m}-01`, until=`${y}-${m}-${pad2(new Date(+y,+m,0).getDate())}`;
+  $("#syncStatus").textContent="Sincronizzazione in corso…";
+  $("#syncInfo").textContent="Sincronizzazione in corso…";
+  try{
+    const r = await fetch(`/api/team-sync?key=${encodeURIComponent(pw)}&since=${since}&until=${until}`);
+    if(r.status===401){ setPw(""); syncing=false; showLogin(true); return; }
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error||"Errore sconosciuto");
+    j.lastSync = new Date().toISOString();
+    state.mesi[state.mese]=j; save();
+    $("#syncStatus").textContent="✓ Aggiornato.";
+    $("#syncMsg").textContent=(j.warn||[]).map(w=>"• "+w).join("\n");
+    render(); renderMM();
+  }catch(e){
+    $("#syncStatus").textContent="";
+    $("#syncMsg").textContent="⚠ "+e.message;
+    if(!silenzioso) openOv("ovSync");
+    $("#syncInfo").textContent="Errore di sincronizzazione (vedi Sync)";
+  }
+  syncing=false;
+}
+
+/* ---------- login (stessa password del Funnel) ---------- */
+function showLogin(err){
+  $("#ovLogin").classList.add("on");
+  $("#pwErr").style.display = err ? "" : "none";
+  setTimeout(()=>$("#pwIn").focus(),50);
+}
+async function tryLogin(){
+  const pw=$("#pwIn").value.trim(); if(!pw) return;
+  try{
+    const r = await fetch(`/api/ping?key=${encodeURIComponent(pw)}`);
+    if(!r.ok) throw 0;
+    setPw(pw); $("#ovLogin").classList.remove("on");
+    doSync(true);
+  }catch(e){ showLogin(true); }
+}
+
+/* ---------- export / backup ---------- */
+function download(name,text,mime){
+  const b=new Blob([text],{type:mime||"text/plain;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},300);
+}
+function csvOut(){
+  const d=dati(); if(!d) return "";
+  const cols = state.vista==="closer" ? COLS_CLOSER : COLS_SETTER;
+  const head=["Persona","Data"];
+  cols.forEach(c=>{ if(c.g) head.push(c.l+" (GHL)"); if(c.s) head.push(c.l+" (Foglio)"); });
+  const righe=[head.join(";")];
+  const people=d[state.vista==="closer"?"closer":"setter"]||[];
+  const days=WKS.flatMap(w=>w.days);
+  for(const p of people) for(const day of days){
+    const r=(p.giorni&&p.giorni[day])||{}; if(!Object.keys(r).length) continue;
+    const row=[p.nome, day.split("-").reverse().join("/")];
+    cols.forEach(c=>{ if(c.g) row.push(String(r[c.g]||0).replace(".",","));
+                      if(c.s) row.push(String(r[c.s]||0).replace(".",",")); });
+    righe.push(row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";"));
+  }
+  return righe.join("\n");
+}
+
+/* ---------- parametri ---------- */
+function openParams(){
+  const rows = cfgNames("closer").map(n=>
+    `<div class="prow"><label>Obiettivo mensile · <b>${esc(n)}</b> (€)</label>
+     <input type="number" min="0" step="500" data-ob="${esc(n)}" value="${obiettivoDi(n)}"></div>`).join("");
+  $("#paramBody").innerHTML = rows
+    + `<div class="prow"><label>Obiettivo per un closer nuovo (€)</label><input type="number" min="0" step="500" id="pObN" value="${state.params.obNuovo}"></div>`
+    + `<div class="prow"><label>Target fissate / mese per setter</label><input type="number" min="0" id="pSetT" value="${state.params.setTarget}"></div>`
+    + `<div class="prow"><label>Obiettivo fissate / mese del team</label><input type="number" min="0" id="pSetTeam" value="${state.params.setTeam}"></div>`
+    + `<div class="prow"><label>Tolleranza confronto € (%)</label><input type="number" min="0" max="50" id="pTol" value="${state.params.tolPct}"></div>`;
+  openOv("ovParam");
+}
+function saveParams(){
+  $$('#paramBody [data-ob]').forEach(i=>{ state.params.obiettivi[i.dataset.ob]=+i.value||0; });
+  state.params.obNuovo=+$("#pObN").value||0;
+  state.params.setTarget=+$("#pSetT").value||0;
+  state.params.setTeam=+$("#pSetTeam").value||0;
+  state.params.tolPct=+$("#pTol").value||0;
+  save(); closeOv(); render(); renderMM();
+}
+
+/* ---------- ui ---------- */
+function fillWk(){
+  const cur=$("#wk").value||filtroWk;
+  $("#wk").innerHTML = `<option value="ALL">Tutto il mese</option><option value="OGGI">Oggi</option><option value="IERI">Ieri</option>`
+    + WKS.map(w=>`<option value="${w.idx}">${w.label} · ${w.sub}</option>`).join("");
+  $("#wk").value=[...$("#wk").options].some(o=>o.value===String(cur))?cur:"ALL";
+  filtroWk=$("#wk").value;
+}
+const openOv = id => $("#"+id).classList.add("on");
+const closeOv = () => $$(".ov").forEach(o=>{ if(o.id!=="ovLogin") o.classList.remove("on"); });
+
+document.addEventListener("click", e=>{
+  const t=e.target;
+  if(t.closest("[data-close]")){ closeOv(); return; }
+  const vt=t.closest(".vtab"); if(vt){ state.vista=vt.dataset.v; save(); render(); return; }
+  const fc=t.closest(".fchip"); if(fc){ state.fonte=fc.dataset.f; save(); render(); return; }
+  const r1=t.closest("tr.lv0"); if(r1){ const n=r1.dataset.p;
+    openP.has(n)?openP.delete(n):openP.add(n); render(); return; }
+  const r2=t.closest("tr.lv1"); if(r2){ const k=r2.dataset.p+"|"+r2.dataset.w;
+    openW.has(k)?openW.delete(k):openW.add(k); render(); return; }
+});
+$("#mese").addEventListener("change", ()=>{ state.mese=$("#mese").value; save();
+  filtroWk="ALL"; openP.clear(); openW.clear();
+  render(); if(!dati()) doSync(true); else renderMM(); });
+$("#wk").addEventListener("change", ()=>{ filtroWk=$("#wk").value; render(); renderMM(); });
+$("#bNow").onclick=()=>doSync(false);
+$("#bNow2").onclick=()=>doSync(false);
+$("#bSync").onclick=()=>{ renderMM(); openOv("ovSync"); };
+$("#bParam").onclick=openParams;
+$("#pSave").onclick=saveParams;
+$("#bExp").onclick=()=>download(`KPI_Team_${state.vista}_${state.mese}.csv`, csvOut(), "text/csv;charset=utf-8");
+$("#bJson").onclick=()=>{ $("#jsonBox").value=JSON.stringify(state); openOv("ovJson"); };
+$("#jRestore").onclick=()=>{ try{ const s=JSON.parse($("#jsonBox").value);
+    if(!s || typeof s!=="object") throw 0; state=Object.assign(state,s); save(); closeOv(); render(); renderMM(); }
+  catch(e){ alert("Testo non valido."); } };
+$("#jWipe").onclick=()=>{ if(confirm("Svuotare tutti i dati del team salvati in questo browser?")){
+    state.mesi={}; save(); closeOv(); render(); } };
+$("#bLogin").onclick=tryLogin;
+$("#pwIn").addEventListener("keydown", e=>{ if(e.key==="Enter") tryLogin(); });
+
+/* ---------- avvio ---------- */
+(function init(){
+  $("#mese").value=state.mese;
+  fillWk();
+  render(); renderMM();
+  if(getPw()) doSync(true); else showLogin(false);
+  setInterval(()=>{ if(getPw()) doSync(true); }, 15*60*1000);
+})();
+</script>
+</body>
+</html>

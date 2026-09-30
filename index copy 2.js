@@ -1,0 +1,400 @@
+/* ============================================================
+   KPI TEAM Freedom University — server AUTONOMO (v1)
+   ============================================================
+   Progetto SEPARATO dal Funnel: repository suo, servizio Render suo.
+   Fa tre cose:
+   1. Serve la dashboard del team (team.html) con password, alla radice
+   2. /api/team-sync: KPI di setter e closer, giorno per giorno,
+      incrociando GHL (utenti, pipeline, APPUNTAMENTI IN CALENDARIO)
+      con i due fogli Google compilati dal team
+   3. /api/team-debug: diagnosi permessi (utenti, calendari, opportunità)
+
+   Variabili d'ambiente su Render (solo queste tre):
+     SYNC_API_KEY    = password del sito (stessa del Funnel, se vuoi)
+     GHL_TOKEN       = token Integrazione privata GHL (copialo dal
+                       servizio del Funnel: Render → Environment)
+     GHL_LOCATION_ID = id del sub-account GHL (idem)
+   Niente chiavi Meta: questo server non tocca le campagne.
+   ============================================================ */
+import express from "express";
+import cors from "cors";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const { SYNC_API_KEY, GHL_TOKEN, GHL_LOCATION_ID, PORT = 3000 } = process.env;
+
+const GHL = "https://services.leadconnectorhq.com";
+const ghlHeaders = { Authorization: `Bearer ${GHL_TOKEN}`, Version: "2021-07-28", Accept: "application/json" };
+
+app.get("/health", (_req, res) => res.json({ ok: true }));
+function checkKey(req, res, next) {
+  if (SYNC_API_KEY && req.query.key !== SYNC_API_KEY)
+    return res.status(401).json({ ok: false, error: "Password errata." });
+  next();
+}
+app.get("/api/ping", checkKey, (_req, res) => res.json({ ok: true }));
+
+/* ---------- helper condivisi (identici al server del Funnel) ---------- */
+const norm = s => String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+const money = v => { const n=parseFloat(String(v??"").replace(/[€$\s]/g,"").replace(/\.(?=\d{3}\b)/g,"").replace(",",".")); return isFinite(n)?n:0; };
+const dayOf = v => { if(!v) return null; const s=String(v); const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?`${m[1]}-${m[2]}-${m[3]}`:null; };
+async function ghlGET(path){
+  const r = await fetch(GHL+path, {headers: ghlHeaders});
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(`GHL ${path}: ${j.message||j.error||r.status}`);
+  return j;
+}
+
+/* ID dei campi UTM di questa location (dalla diagnosi): funzionano anche senza
+   il permesso "campi personalizzati" sul token. Gli altri campi (Cash, Contrattualizzato,
+   Data Vendita) si risolvono per nome appena il token ha lo scope giusto. */
+const FIELD_FALLBACK = {
+  "eIWChn1tSHr9SV3k8nPg": "utm source",
+  "ngCaDZhKshp4XYiq1Vme": "utm campaign",
+  "bFlpzo17stRQocW1WAEh": "utm medium",
+  "4v33gsK21jenFc8xEyw4": "utm content"
+};
+
+function parseCSVText(text){
+  const rows=[]; let row=[],cur="",q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){ if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+    else if(ch==='"') q=true;
+    else if(ch==='\n'||ch==='\r'){ if(cur!==""||row.length){row.push(cur);rows.push(row);row=[];cur="";} if(ch==='\r'&&text[i+1]==='\n')i++; }
+    else if(ch===','){ row.push(cur); cur=""; }
+    else cur+=ch;
+  }
+  if(cur!==""||row.length){row.push(cur);rows.push(row);}
+  return rows;
+}
+const itDate = s => { const m=String(s||"").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m?`${m[3]}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`:null; };
+const num = s => { const v=parseFloat(String(s??"").replace(/\./g,"").replace(",",".")); return isFinite(v)?v:0; };
+
+/* ============================================================
+   TEAM (aggiunta v3) — dashboard /team: KPI per persona
+   ============================================================
+   Tutto quello che sta sopra questa riga è invariato. Il blocco
+   aggiunge soltanto:
+   - GET /team           → la dashboard del team (team.html),
+                           stessa password del resto del sito
+   - GET /api/team-sync  → KPI di setter e closer, giorno per giorno,
+                           incrociando GHL (utenti, pipeline,
+                           APPUNTAMENTI IN CALENDARIO) con i due
+                           fogli Google compilati dal team
+   - GET /api/team-debug → diagnosi: utenti, calendari, esempio
+                           opportunità (per controllare gli scope)
+
+   PER AGGIUNGERE UNA PERSONA non serve toccare il codice:
+   su Render → Environment si possono impostare
+     TEAM_SETTERS = "Denise,Donato,Lucas,Juliette,NuovoSetter"
+     TEAM_CLOSERS = "Mario,Alberto,Daniela,Gelu,NuovoCloser"
+   Il nome deve coincidere con la scheda del foglio e (anche solo
+   come nome di battesimo) con l'utente in GHL. Poi: nuova scheda
+   nel foglio + utente in GHL, e la dashboard la vede da sola.
+   ============================================================ */
+const TEAM_SETTERS = (process.env.TEAM_SETTERS || "Denise,Donato,Lucas,Juliette")
+  .split(",").map(s=>s.trim()).filter(Boolean);
+const TEAM_CLOSERS = (process.env.TEAM_CLOSERS || "Mario,Alberto,Daniela,Gelu")
+  .split(",").map(s=>s.trim()).filter(Boolean);
+const TEAM_SHEET_SETTING_ID = process.env.TEAM_SHEET_SETTING_ID || "1uS2p_KjisjC_DDAmBM0i1P7SQo0uR0OFO29Y8cScj-Q"; // KPI TEAM SETTING
+const TEAM_SHEET_CLOSER_ID  = process.env.TEAM_SHEET_CLOSER_ID  || "197ajwVgd_JPXxyWPidJsBZ7L_gXJDO620-0-z9XP3eg"; // KPI TEAM VENDITA
+
+/* ---------- pagina /team (stessa logica di dashboard.html) ---------- */
+let teamHTML = "";
+try { teamHTML = readFileSync(join(__dirname, "team.html"), "utf8"); }
+catch { teamHTML = "<h1>team.html mancante nel repository</h1>"; }
+app.get("/",     (_req, res) => res.type("html").send(teamHTML));
+app.get("/team", (_req, res) => res.type("html").send(teamHTML));   /* alias */
+
+/* ---------- accumulatore persona -> giorno -> metriche ---------- */
+function teamShape(nomi){
+  const m = new Map(nomi.map(n => [n, { nome:n, giorni:{} }]));
+  const add = (nome, day, k, v = 1) => {
+    const p = m.get(nome); if(!p || !day || !v) return;
+    if(!p.giorni[day]) p.giorni[day] = {};
+    p.giorni[day][k] = (p.giorni[day][k] || 0) + v;
+  };
+  const set = (nome, day, k, v) => {           // per i saldi (ultimo valore, non somma)
+    const p = m.get(nome); if(!p || !day) return;
+    if(!p.giorni[day]) p.giorni[day] = {};
+    p.giorni[day][k] = v;
+  };
+  return { add, set, toArray: () => [...m.values()] };
+}
+
+/* ============================================================
+   FOGLI GOOGLE DEL TEAM — una scheda per persona
+   Nota (verificato sui fogli reali): l'export gviz SALTA le righe
+   con la sola data e nessun valore, quindi si leggono solo le
+   righe compilate; giorno assente = zero. Le intestazioni hanno
+   spazi finali e il refuso "Trattaive": si cercano per parola
+   chiave, non per uguaglianza.
+   ============================================================ */
+async function teamFetchTab(sheetId, tab){
+  const tried = new Set(); let lastErr = "";
+  for(const t of [tab, tab + " ", tab.trim()]){
+    if(tried.has(t)) continue; tried.add(t);
+    const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(t)}`;
+    try{
+      const r = await fetch(url);
+      if(!r.ok){ lastErr = "HTTP " + r.status; continue; }
+      const text = await r.text();
+      if(text && !/<html|<!doctype/i.test(text.slice(0, 300))) return parseCSVText(text);
+      lastErr = "risposta non CSV (nome scheda inesistente?)";
+    }catch(e){ lastErr = e.message; }
+  }
+  throw new Error(`scheda "${tab}" non leggibile (${lastErr || "nome non trovato"}) — il foglio deve essere condiviso "chiunque abbia il link"`);
+}
+
+/* colmap: [{k, kw:[parole chiave], not:[esclusioni], money, saldo}] */
+function teamParseRows(rows, colmap, since, until, out){
+  let idx = null;                                  // k -> indice colonna corrente
+  for(const row of rows){
+    const cells = row.map(norm);
+    /* riga di intestazione? (le parole chiave compaiono in almeno 3 colonne) */
+    const cand = {}; let hits = 0;
+    for(const c of colmap){
+      const i = cells.findIndex(h => h && c.kw.some(k => h.includes(k)) && !(c.not || []).some(k => h.includes(k)));
+      if(i >= 0){ cand[c.k] = i; hits++; }
+    }
+    if(hits >= Math.min(3, colmap.length)){ idx = cand; continue; }
+    /* riga di dati? (prima colonna = data gg/mm/aaaa) */
+    const day = itDate(row[0]);
+    if(!day || !idx || day < since || day > until) continue;
+    for(const c of colmap){
+      const i = idx[c.k]; if(i == null || i < 0) continue;
+      const raw = row[i]; if(raw == null || String(raw).trim() === "") continue;
+      const v = c.money ? money(raw) : num(raw);
+      if(!v && !c.saldo) continue;
+      if(!out[day]) out[day] = {};
+      out[day][c.k] = c.saldo ? v : (out[day][c.k] || 0) + v;
+    }
+  }
+}
+
+const TEAM_COLS_CLOSER = [
+  { k:"sLead",   kw:["lead assegnati"] },
+  { k:"sFixMe",  kw:["fissati da me"] },
+  { k:"sTratt",  kw:["numero tratta"] },                 // "Numero Trattaive/Trattative"
+  { k:"sCallSv", kw:["call svolte"] },
+  { k:"sVend",   kw:["vendite"] },
+  { k:"sPerse",  kw:["perse"] },                          // "Trattaive Perse"
+  { k:"sNoShow", kw:["no show"] },                        // non intercetta "% Show Up"
+  { k:"sRisch",  kw:["rischedulate"] },
+  { k:"sFatt",   kw:["fatturato"], money:true },
+  { k:"sInc",    kw:["incassato"], money:true },
+];
+const TEAM_COLS_SETTER = [
+  { k:"sAss",    kw:["lead assegnati"] },
+  { k:"sCall",   kw:["chiamate"] },
+  { k:"sFix",    kw:["appuntamenti fissati"] },
+  { k:"sNonFix", kw:["non fissati"], saldo:true },        // saldo di fine giornata, non si somma
+  { k:"sFatt",   kw:["fatturato"], money:true },
+];
+
+async function teamFetchSheets(since, until, S, C, warn){
+  for(const nome of TEAM_CLOSERS){
+    try{
+      const rows = await teamFetchTab(TEAM_SHEET_CLOSER_ID, nome);
+      const giorni = {}; teamParseRows(rows, TEAM_COLS_CLOSER, since, until, giorni);
+      for(const [d, rec] of Object.entries(giorni))
+        for(const [k, v] of Object.entries(rec)) C.add(nome, d, k, v);
+    }catch(e){ warn.push(`Foglio vendita · ${nome}: ${e.message}`); }
+  }
+  for(const nome of TEAM_SETTERS){
+    try{
+      const rows = await teamFetchTab(TEAM_SHEET_SETTING_ID, nome);
+      const giorni = {}; teamParseRows(rows, TEAM_COLS_SETTER, since, until, giorni);
+      for(const [d, rec] of Object.entries(giorni))
+        for(const [k, v] of Object.entries(rec))
+          (k === "sNonFix" ? S.set : S.add)(nome, d, k, v);
+    }catch(e){ warn.push(`Foglio setting · ${nome}: ${e.message}`); }
+  }
+}
+
+/* ============================================================
+   GHL PER PERSONA — utenti, calendari, opportunità
+   (scansione separata: fetchGHL del funnel resta com'è)
+   Date, come concordato:
+   - appuntamenti / show / no show → GIORNO DELL'APPUNTAMENTO in calendario
+   - vendite / fatturato / cash   → DATA VENDITA (campo custom), altrimenti
+                                    giorno del passaggio a "Vinto"
+   - trattative                   → giorno di creazione nella pipeline closer
+   ============================================================ */
+async function teamFetchGHL(since, until, S, C, warn){
+  if(!GHL_TOKEN || !GHL_LOCATION_ID){ warn.push("GHL non configurato (mancano GHL_TOKEN / GHL_LOCATION_ID)."); return; }
+
+  /* 1) utenti → abbina i nomi configurati agli utenti GHL */
+  const byId = new Map(); const userIdOf = {};
+  try{
+    const ju = await ghlGET(`/users/?locationId=${GHL_LOCATION_ID}`);
+    const users = ju.users || [];
+    for(const n of [...TEAM_SETTERS, ...TEAM_CLOSERS]){
+      const nn = norm(n);
+      const u = users.find(u => [u.name, u.firstName, `${u.firstName||""} ${u.lastName||""}`]
+        .some(x => norm(x).includes(nn)));
+      if(u){ byId.set(u.id, n); userIdOf[n] = u.id; }
+    }
+    const mancanti = [...TEAM_SETTERS, ...TEAM_CLOSERS].filter(n => !userIdOf[n]);
+    if(users.length && mancanti.length)
+      warn.push("Utenti GHL non abbinati per nome: " + mancanti.join(", ") + " — il nome della scheda nel foglio deve coincidere con il nome utente in GHL.");
+    if(!users.length) warn.push("GHL: elenco utenti vuoto.");
+  }catch(e){
+    warn.push('GHL utenti non leggibili (' + e.message + '): aggiungi lo scope "View Users" all\'integrazione privata.');
+  }
+
+  /* 2) calendari → appuntamenti dei closer, contati alla data dell'appuntamento */
+  const t0 = Date.parse(since + "T00:00:00Z") - 864e5;   // margine per il fuso orario
+  const t1 = Date.parse(until + "T23:59:59Z") + 864e5;
+  for(const nome of TEAM_CLOSERS){
+    const uid = userIdOf[nome]; if(!uid) continue;
+    try{
+      const je = await ghlGET(`/calendars/events?locationId=${GHL_LOCATION_ID}&userId=${uid}&startTime=${t0}&endTime=${t1}`);
+      for(const ev of (je.events || [])){
+        let day = dayOf(String(ev.startTime || ""));
+        if(!day && ev.startTime) { try{ day = new Date(+ev.startTime || ev.startTime).toISOString().slice(0,10); }catch(_){} }
+        if(!day || day < since || day > until) continue;
+        const st = norm(ev.appointmentStatus || ev.appoinmentStatus || "");
+        if(st === "cancelled" || st === "invalid"){ C.add(nome, day, "gCanc"); continue; }
+        C.add(nome, day, "gApp");
+        if(st === "showed") C.add(nome, day, "gShow");
+        else if(st === "noshow" || st === "no_show" || st === "no-show") C.add(nome, day, "gNoShow");
+      }
+    }catch(e){
+      warn.push(`GHL calendario di ${nome}: ${e.message} — se è un errore di permessi, aggiungi lo scope "View Calendars / Calendar Events" all'integrazione privata.`);
+    }
+  }
+
+  /* 3) opportunità → per persona assegnata */
+  const stages = new Map();
+  try{
+    const pipes = await ghlGET(`/opportunities/pipelines?locationId=${GHL_LOCATION_ID}`);
+    (pipes.pipelines || []).forEach(p => (p.stages || []).forEach(s => stages.set(s.id, { pipe:norm(p.name), stage:norm(s.name) })));
+  }catch(e){ warn.push("GHL pipeline non leggibili: " + e.message); return; }
+
+  const cf = new Map(Object.entries(FIELD_FALLBACK));
+  for(const q of ["?model=opportunity","?model=contact","?model=all",""]){
+    try{
+      const defs = await ghlGET(`/locations/${GHL_LOCATION_ID}/customFields${q}`);
+      (defs.customFields || []).forEach(f => cf.set(f.id, norm(f.name)));
+    }catch(e){ /* variante non disponibile */ }
+  }
+  const cfVal = (opp, ...names) => {
+    const arr = opp.customFields || opp.customField || opp.custom_fields || [];
+    for(const f of arr){
+      const nm = cf.get(f.id || f.customFieldId) || norm(f.name || f.key || "");
+      if(names.some(n => nm.includes(n))){
+        const v = f.fieldValue ?? f.fieldValueString ?? f.field_value ?? f.value;
+        if(Array.isArray(v)) return v.join(", ");
+        return v ?? null;
+      }
+    }
+    return null;
+  };
+  const setterOf = v => { const nv = norm(v || ""); if(!nv) return null; return TEAM_SETTERS.find(n => nv.includes(norm(n))) || null; };
+  const inR = d => d && d >= since && d <= until;
+
+  let got = 0, startAfter = null, startAfterId = null, guardia = 0;
+  while(guardia++ < 500){
+    let path = `/opportunities/search?location_id=${GHL_LOCATION_ID}&limit=100`;
+    if(startAfterId) path += `&startAfterId=${encodeURIComponent(startAfterId)}&startAfter=${encodeURIComponent(startAfter)}`;
+    const j = await ghlGET(path);
+    const list = j.opportunities || [];
+    if(!list.length) break;
+    got += list.length;
+
+    for(const o of list){
+      const st = stages.get(o.pipelineStageId) || { pipe:"", stage:"" };
+      const who = byId.get(o.assignedTo) || null;
+      const created = dayOf(o.createdAt);
+      const changed = dayOf(o.lastStageChangeAt || o.lastStatusChangeAt || o.updatedAt) || created;
+
+      if(st.pipe.includes("closer")){
+        const s = st.stage;
+        const nome = who && TEAM_CLOSERS.includes(who) ? who : null;
+        if(nome){
+          if(inR(created)) C.add(nome, created, "gTratt");
+          if(s.includes("perso") && inR(changed)) C.add(nome, changed, "gPerse");
+          if(s.includes("vinto")){
+            const saleDay = dayOf(cfVal(o, "data vendita")) || changed;
+            if(inR(saleDay)){
+              C.add(nome, saleDay, "gVend");
+              const venduto = money(cfVal(o, "contrattualizzato")) || (+o.monetaryValue || 0);
+              const cash    = money(cfVal(o, "cash collected"));
+              if(venduto) C.add(nome, saleDay, "gFatt", venduto);
+              if(cash)    C.add(nome, saleDay, "gInc",  cash);
+            }
+          }
+        }
+        /* la fissata del SETTER: se l'opportunità porta un campo "setter" */
+        const se = setterOf(cfVal(o, "setter"));
+        if(se && inR(created)) S.add(se, created, "gFix");
+      }
+      else if(st.pipe.includes("setter")){
+        const nome = who && TEAM_SETTERS.includes(who) ? who : null;
+        if(!nome) continue;
+        const s = st.stage;
+        if(inR(created)) S.add(nome, created, "gAss");
+        const contattato = ["contattato","call 1","call 2","call 3","non interessato","non in target","semina","appuntamento fissato"].some(x => s.includes(x));
+        if(contattato && inR(changed)) S.add(nome, changed, "gCont");
+        if(s.includes("non interessato") && inR(changed)) S.add(nome, changed, "gNonInt");
+        if(s.includes("non in target")   && inR(changed)) S.add(nome, changed, "gNonTarget");
+      }
+    }
+    const m = j.meta || {};
+    if(list.length < 100 || !m.startAfterId) break;
+    startAfterId = m.startAfterId; startAfter = m.startAfter;
+  }
+  if(!got) warn.push("GHL: nessuna opportunità ricevuta per il team — controlla token e Location ID.");
+}
+
+/* ---------- /api/team-sync ---------- */
+app.get("/api/team-sync", checkKey, async (req, res) => {
+  try{
+    const until = req.query.until || new Date().toISOString().slice(0, 10);
+    const since = req.query.since || new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+    const warn = [];
+    const S = teamShape(TEAM_SETTERS), C = teamShape(TEAM_CLOSERS);
+    try{ await teamFetchGHL(since, until, S, C, warn); }catch(e){ warn.push("GHL team: " + e.message); }
+    await teamFetchSheets(since, until, S, C, warn);
+    res.json({ ok:true, since, until, warn,
+               setter: S.toArray(), closer: C.toArray(),
+               config: { setters: TEAM_SETTERS, closers: TEAM_CLOSERS } });
+  }catch(err){
+    console.error(err);
+    res.status(500).json({ ok:false, error:String(err.message || err) });
+  }
+});
+
+/* ---------- diagnosi team: utenti, calendari, esempio opportunità ---------- */
+app.get("/api/team-debug", checkKey, async (_req, res) => {
+  const out = { config:{ setters:TEAM_SETTERS, closers:TEAM_CLOSERS } };
+  try{
+    const ju = await ghlGET(`/users/?locationId=${GHL_LOCATION_ID}`);
+    out.utenti = (ju.users || []).map(u => ({ id:u.id, nome:u.name || `${u.firstName||""} ${u.lastName||""}`.trim(), email:u.email }));
+  }catch(e){ out.utenti = "ERRORE: " + e.message; }
+  try{
+    const primo = out.utenti && out.utenti[0] && out.utenti[0].id;
+    if(primo){
+      const t1 = Date.now(), t0 = t1 - 14 * 864e5;
+      const je = await ghlGET(`/calendars/events?locationId=${GHL_LOCATION_ID}&userId=${primo}&startTime=${t0}&endTime=${t1}`);
+      out.esempioCalendario = (je.events || []).slice(0, 5).map(ev => ({ inizio:ev.startTime, stato:ev.appointmentStatus, assegnatoA:ev.assignedUserId, titolo:ev.title }));
+      out.eventiUltimi14gg = (je.events || []).length;
+    }
+  }catch(e){ out.esempioCalendario = "ERRORE: " + e.message; }
+  try{
+    const j = await ghlGET(`/opportunities/search?location_id=${GHL_LOCATION_ID}&limit=3`);
+    out.esempioOpportunita = (j.opportunities || []).map(o => ({ nome:o.name, assignedTo:o.assignedTo, creata:o.createdAt, fase:o.pipelineStageId }));
+  }catch(e){ out.esempioOpportunita = "ERRORE: " + e.message; }
+  res.json(out);
+});
+
+
+app.listen(PORT, ()=>console.log(`KPI TEAM server attivo sulla porta ${PORT}`));
