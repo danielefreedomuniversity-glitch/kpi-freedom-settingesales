@@ -62,6 +62,9 @@ select:focus,input:focus{border-color:var(--adv)}
 .fchip[aria-pressed="true"]{background:var(--eco);color:#0A1020;border-color:transparent}
 .fchip.conf[aria-pressed="true"]{background:var(--adv)}
 .fchip.fog[aria-pressed="true"]{background:var(--warn)}
+.rkt{font-size:8.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:3px;
+  border:1px solid var(--line);background:transparent;color:var(--ink-3);cursor:pointer;font-family:inherit}
+.rkt[aria-pressed="true"]{background:var(--raise);color:var(--ink);border-color:var(--ink-3)}
 
 /* ---------- tiles ---------- */
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line-2)}
@@ -73,7 +76,7 @@ select:focus,input:focus{border-color:var(--adv)}
 
 /* ---------- tabella team ---------- */
 .twrap{overflow-x:auto}
-table.team{border-collapse:collapse;width:100%;min-width:1080px}
+table.team{border-collapse:collapse;width:100%;min-width:1480px}
 .team th{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);font-weight:700;
   padding:8px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line);background:var(--surface-2)}
 .team th:first-child{text-align:left;padding-left:18px}
@@ -198,11 +201,11 @@ textarea{width:100%;height:170px;background:var(--surface-2);border:1px solid va
 
   <aside class="side" id="side">
     <div class="card cclo" id="cardClo">
-      <div class="ch"><span class="t">Classifica Closer</span><span class="s" id="cloSub">per incassato</span></div>
+      <div class="ch"><span class="t">Classifica Closer</span><span style="display:flex;gap:4px"><button class="rkt" data-rk="clo" data-m="inc">€ Incassato</button><button class="rkt" data-rk="clo" data-m="vpl">VPL</button></span></div>
       <div id="rankClo"></div>
     </div>
     <div class="card cset" id="cardSet">
-      <div class="ch"><span class="t">Classifica Setter</span><span class="s" id="setSub">per call fissate</span></div>
+      <div class="ch"><span class="t">Classifica Setter</span><span style="display:flex;gap:4px"><button class="rkt" data-rk="set" data-m="fix">Fissate</button><button class="rkt" data-rk="set" data-m="vpl">VPL</button></span></div>
       <div id="rankSet"></div>
     </div>
     <div class="card cobi">
@@ -312,7 +315,7 @@ const KEY = "kpi_team_v1";
 const PW_KEY = "kpi_pw";                       /* stessa password del Funnel */
 const P_DEF = { obiettivi:{ Mario:70000, Alberto:50000, Daniela:25000, Gelu:25000 },
                 obNuovo:25000, setTarget:50, setTeam:300, tolPct:2 };
-let state = { mese:(new Date()).toISOString().slice(0,7), vista:"closer", fonte:"ghl",
+let state = { mese:(new Date()).toISOString().slice(0,7), vista:"closer", fonte:"ghl", rankClo:"inc", rankSet:"fix",
               params: JSON.parse(JSON.stringify(P_DEF)), mesi:{} };
 try{ const v = localStorage.getItem(KEY);
   if(v){ const s = JSON.parse(v);
@@ -336,9 +339,13 @@ const cfgNames = kind => { const d=dati();
 
 /* ---------- colonne (g = chiave GHL · s = chiave foglio) ---------- */
 const COLS_CLOSER = [
-  {k:"lead",  l:"Lead ass.",     s:"sLead",              f:"int", grp:"set", tip:"Lead assegnati (foglio)"},
+  {k:"lead",  l:"Lead ass.",     g:"gAss", s:"sLead",    f:"int", grp:"set", tip:"Lead assegnati al closer (GHL: entrati in pipeline setting a suo nome)"},
+  {k:"chiam", l:"Chiamate",      s:"sChiam",             f:"int", grp:"set", tip:"Closer full-stack: chiamate ai lead — colonna «Chiamate effettuate» del foglio"},
+  {k:"fixme", l:"Fiss. da me",   s:"sFixMe",             f:"int", grp:"set", tip:"Appuntamenti che il closer si è fissato da solo (foglio)"},
+  {k:"ffR",   l:"% Fiss/Chiam",  f:"pct", grp:"set", calc:(v)=> div(v.fixme, v.chiam)},
+  {k:"cont",  l:"Contattati",    g:"gCont",              f:"int", grp:"set", tip:"GHL: esiti registrati dal closer in pipeline setting"},
   {k:"app",   l:"Appuntamenti",  g:"gApp",               f:"int", grp:"set", tip:"Appuntamenti in calendario GHL, alla data dell'appuntamento"},
-  {k:"show",  l:"Show/Call sv.", g:"gShow", s:"sCallSv", f:"int", grp:"set", tip:"GHL: esito Showed · Foglio: Call svolte"},
+  {k:"show",  l:"Show/Call sv.", g:"gShow", s:"sCallSv", f:"int", grp:"set", tip:"GHL: call avvenuta = opportunità a Follow Up / Vinto / Perso (come nel Funnel) · Foglio: Call svolte"},
   {k:"nosh",  l:"No show",       g:"gNoShow", s:"sNoShow", f:"int", grp:"set"},
   {k:"shR",   l:"% Show up",     f:"pct", grp:"set", calc:(v)=> v.src==="s" ? div(v.show, v.show+v.nosh) : div(v.show, v.app||v.show+v.nosh)},
   {k:"tratt", l:"Trattative",    g:"gTratt", s:"sTratt", f:"int", grp:"clo"},
@@ -347,9 +354,11 @@ const COLS_CLOSER = [
   {k:"perse", l:"Perse",         g:"gPerse", s:"sPerse", f:"int", grp:"clo"},
   {k:"risch", l:"Risched.",      s:"sRisch",             f:"int", grp:"set"},
   {k:"canc",  l:"Cancellati",    g:"gCanc",              f:"int", grp:"set"},
-  {k:"fatt",  l:"Fatturato",     g:"gFatt", s:"sFatt",   f:"eur", grp:"eco"},
-  {k:"inc",   l:"Incassato",     g:"gInc",  s:"sInc",    f:"eur", grp:"eco"},
+  {k:"fatt",  l:"Fatturato",     g:"gFatt", s:"sFatt",   f:"eur", grp:"eco", tip:"Contrattualizzato, o in mancanza il Valore dell'opportunità"},
+  {k:"contr", l:"Contrattual.",  g:"gContr",             f:"eur", grp:"eco", tip:"Solo il campo «Contrattualizzato» dell'opportunità (GHL)"},
+  {k:"inc",   l:"Incassato",     g:"gInc",  s:"sInc",    f:"eur", grp:"eco", tip:"Campo «Cash Collected» dell'opportunità (GHL)"},
   {k:"tick",  l:"Ticket",        f:"eur", grp:"eco", calc:(v)=> div(v.fatt, v.vend)},
+  {k:"vpl",   l:"VPL €/lead",    f:"eur", grp:"eco", calc:(v)=> div(v.fatt, v.lead), tip:"Valore per lead = Fatturato / Lead assegnati"},
 ];
 const COLS_SETTER = [
   {k:"ass",   l:"Lead ass.",     g:"gAss",  s:"sAss",    f:"int", grp:"set"},
@@ -361,6 +370,7 @@ const COLS_SETTER = [
   {k:"nint",  l:"Non interess.", g:"gNonInt",            f:"int", grp:"clo"},
   {k:"ntgt",  l:"Non in target", g:"gNonTarget",         f:"int", grp:"clo"},
   {k:"fatt",  l:"Fatt. generato",s:"sFatt",              f:"eur", grp:"eco"},
+  {k:"vpl",   l:"VPL €/lead",    f:"eur", grp:"eco", calc:(v)=> div(v.fatt, v.ass), tip:"Valore per lead = Fatturato generato / Lead assegnati"},
 ];
 const COLS = () => state.vista==="closer" ? COLS_CLOSER : COLS_SETTER;
 
@@ -539,13 +549,15 @@ function tiles(TOT){
         ["ASET","Show rate", fmt(R.shR,"pct"), `${nf(R.show,0)} show · ${nf(R.nosh,0)} no show`],
         ["ACLO","Vendite", nf(R.vend,0), `chiusura ${fmt(R.clR,"pct")}`],
         ["AECO","Fatturato", fmt(R.fatt,"eur"), `ticket ${fmt(R.tick,"eur")}`],
-        ["AECO","Incassato", fmt(R.inc,"eur"), "cash del periodo"] ];
+        ["AECO","Incassato", fmt(R.inc,"eur"), "cash del periodo"],
+        ["AECO","VPL", fmt(R.vpl,"eur"), "€ per lead assegnato"] ];
   }else{
     t=[ ["ASET","Lead assegnati", nf(R.ass,0), ""],
         ["ASET","Chiamate", nf(R.call,0), "dal foglio"],
         ["ASET","Fissate", nf(R.fix,0), `${fmt(R.fxR,"pct")} su chiamate`],
         ["ACLO","Non interessati", nf(R.nint,0), `${nf(R.ntgt,0)} non in target`],
-        ["AECO","Fatt. generato", fmt(R.fatt,"eur"), "dai lead dei setter"] ];
+        ["AECO","Fatt. generato", fmt(R.fatt,"eur"), "dai lead dei setter"],
+        ["AECO","VPL", fmt(R.vpl,"eur"), "fatt. generato / lead"] ];
   }
   $("#tiles").innerHTML = t.map(([c,l,v,s])=>`<div class="tile ${c.toLowerCase()}"><div class="tl">${l}</div><div class="tv">${v}</div><div class="ts">${s}</div></div>`).join("");
 }
@@ -560,22 +572,33 @@ function leaderboard(persone){
   const cl = (isCl?persone:(altro||[]).map(p=>({p,rec:aggDays(p,days)})));
   const st = (!isCl?persone:(altro||[]).map(p=>({p,rec:aggDays(p,days)})));
 
+  $$(".rkt").forEach(b=>b.setAttribute("aria-pressed",
+    String((b.dataset.rk==="clo"?state.rankClo:state.rankSet)===b.dataset.m)));
+
+  const mC = state.rankClo;                        /* "inc" oppure "vpl" */
   const rkClo = cl.map(({p,rec})=>{ const R = resolved(rec, F, COLS_CLOSER);
-      return {nome:p.nome, inc:R.inc, fatt:R.fatt, vend:R.vend, clR:R.clR, shR:R.shR}; })
-    .sort((a,b)=>b.inc-a.inc || b.fatt-a.fatt || b.vend-a.vend);
+      return {nome:p.nome, inc:R.inc, fatt:R.fatt, vend:R.vend, clR:R.clR, shR:R.shR, vpl:R.vpl}; })
+    .sort((a,b)=> mC==="vpl" ? (b.vpl-a.vpl || b.fatt-a.fatt)
+                             : (b.inc-a.inc || b.fatt-a.fatt || b.vend-a.vend));
   $("#rankClo").innerHTML = rkClo.map((r,i)=>rkRow(i, r.nome,
-      fmt(r.inc,"eur"), "incassato",
-      `${nf(r.vend,0)} vendite · chius. ${fmt(r.clR,"pct")} · show ${fmt(r.shR,"pct")}`,
-      filtroWk==="ALL" ? div(r.inc, obiettivoDi(r.nome)) : null)).join("")
+      mC==="vpl" ? fmt(r.vpl,"eur") : fmt(r.inc,"eur"),
+      mC==="vpl" ? "VPL €/lead" : "incassato",
+      mC==="vpl" ? `${fmt(r.inc,"eur")} incassato · ${nf(r.vend,0)} vendite · chius. ${fmt(r.clR,"pct")}`
+                 : `${nf(r.vend,0)} vendite · VPL ${fmt(r.vpl,"eur")} · show ${fmt(r.shR,"pct")}`,
+      (mC!=="vpl" && filtroWk==="ALL") ? div(r.inc, obiettivoDi(r.nome)) : null)).join("")
     || `<div class="rk"><span class="who"><span>nessun dato nel periodo</span></span></div>`;
 
+  const mS = state.rankSet;                        /* "fix" oppure "vpl" */
   const rkSet = st.map(({p,rec})=>{ const R = resolved(rec, F, COLS_SETTER);
-      return {nome:p.nome, fix:R.fix, call:R.call, fxR:R.fxR, ass:R.ass}; })
-    .sort((a,b)=>b.fix-a.fix || b.fxR-a.fxR);
+      return {nome:p.nome, fix:R.fix, call:R.call, fxR:R.fxR, ass:R.ass, fatt:R.fatt, vpl:R.vpl}; })
+    .sort((a,b)=> mS==="vpl" ? (b.vpl-a.vpl || b.fix-a.fix)
+                             : (b.fix-a.fix || b.fxR-a.fxR));
   $("#rankSet").innerHTML = rkSet.map((r,i)=>rkRow(i, r.nome,
-      nf(r.fix,0), "fissate",
-      `${nf(r.call,0)} chiamate · ${fmt(r.fxR,"pct")} fiss/chiam`,
-      filtroWk==="ALL" ? div(r.fix, state.params.setTarget||50) : null)).join("")
+      mS==="vpl" ? fmt(r.vpl,"eur") : nf(r.fix,0),
+      mS==="vpl" ? "VPL €/lead" : "fissate",
+      mS==="vpl" ? `${fmt(r.fatt,"eur")} generato · ${nf(r.fix,0)} fissate`
+                 : `${nf(r.call,0)} chiamate · ${fmt(r.fxR,"pct")} fiss/chiam · VPL ${fmt(r.vpl,"eur")}`,
+      (mS!=="vpl" && filtroWk==="ALL") ? div(r.fix, state.params.setTarget||50) : null)).join("")
     || `<div class="rk"><span class="who"><span>nessun dato nel periodo</span></span></div>`;
 }
 function rkRow(i, nome, val, valSub, sub, prog){
@@ -738,6 +761,9 @@ const closeOv = () => $$(".ov").forEach(o=>{ if(o.id!=="ovLogin") o.classList.re
 document.addEventListener("click", e=>{
   const t=e.target;
   if(t.closest("[data-close]")){ closeOv(); return; }
+  const rk=t.closest(".rkt"); if(rk){
+    if(rk.dataset.rk==="clo") state.rankClo=rk.dataset.m; else state.rankSet=rk.dataset.m;
+    save(); render(); return; }
   const vt=t.closest(".vtab"); if(vt){ state.vista=vt.dataset.v; save(); render(); return; }
   const fc=t.closest(".fchip"); if(fc){ state.fonte=fc.dataset.f; save(); render(); return; }
   const r1=t.closest("tr.lv0"); if(r1){ const n=r1.dataset.p;

@@ -181,6 +181,7 @@ function teamParseRows(rows, colmap, since, until, out){
 
 const TEAM_COLS_CLOSER = [
   { k:"sLead",   kw:["lead assegnati"] },
+  { k:"sChiam",  kw:["chiamate"] },                       // closer full-stack: dial sui lead (colonna da aggiungere al foglio)
   { k:"sFixMe",  kw:["fissati da me"] },
   { k:"sTratt",  kw:["numero tratta"] },                 // "Numero Trattaive/Trattative"
   { k:"sCallSv", kw:["call svolte"] },
@@ -264,8 +265,9 @@ async function teamFetchGHL(since, until, S, C, warn){
         const st = norm(ev.appointmentStatus || ev.appoinmentStatus || "");
         if(st === "cancelled" || st === "invalid"){ C.add(nome, day, "gCanc"); continue; }
         C.add(nome, day, "gApp");
-        if(st === "showed") C.add(nome, day, "gShow");
-        else if(st === "noshow" || st === "no_show" || st === "no-show") C.add(nome, day, "gNoShow");
+        /* NB: show e no-show NON si leggono qui: il team segna l'esito nelle
+           FASI della pipeline closer (come nel Funnel), non sullo stato
+           dell'appuntamento in calendario — si contano più sotto. */
       }
     }catch(e){
       warn.push(`GHL calendario di ${nome}: ${e.message} — se è un errore di permessi, aggiungi lo scope "View Calendars / Calendar Events" all'integrazione privata.`);
@@ -280,11 +282,20 @@ async function teamFetchGHL(since, until, S, C, warn){
   }catch(e){ warn.push("GHL pipeline non leggibili: " + e.message); return; }
 
   const cf = new Map(Object.entries(FIELD_FALLBACK));
+  let scopeOk = false;
   for(const q of ["?model=opportunity","?model=contact","?model=all",""]){
     try{
       const defs = await ghlGET(`/locations/${GHL_LOCATION_ID}/customFields${q}`);
       (defs.customFields || []).forEach(f => cf.set(f.id, norm(f.name)));
+      scopeOk = true;
     }catch(e){ /* variante non disponibile */ }
+  }
+  if(!scopeOk){
+    warn.push('Token GHL senza permesso sui campi personalizzati: Incassato (Cash Collected), Contrattualizzato e Data Vendita restano a zero. Aggiungi lo scope "View Custom Fields" all\'integrazione privata in GHL e risincronizza.');
+  } else {
+    const trovato = n => [...cf.values()].some(v => v.includes(n));
+    const mancanti = ["cash collected","contrattualizzato","data vendita"].filter(n => !trovato(n));
+    if(mancanti.length) warn.push("Campi GHL non trovati per nome: " + mancanti.join(", ") + " — controlla come si chiamano in GHL (Impostazioni → Campi personalizzati): Incassato e data vendita dipendono da questi.");
   }
   const cfVal = (opp, ...names) => {
     const arr = opp.customFields || opp.customField || opp.custom_fields || [];
@@ -321,13 +332,19 @@ async function teamFetchGHL(since, until, S, C, warn){
         const nome = who && TEAM_CLOSERS.includes(who) ? who : null;
         if(nome){
           if(inR(created)) C.add(nome, created, "gTratt");
+          /* show / no-show dagli ESITI di pipeline, come nel Funnel:
+             No Show → no-show · Follow Up / Vinto / Perso → la call c'è stata */
+          if(s.includes("no show") && inR(changed)) C.add(nome, changed, "gNoShow");
+          if(["follow","vinto","perso"].some(x => s.includes(x)) && inR(changed)) C.add(nome, changed, "gShow");
           if(s.includes("perso") && inR(changed)) C.add(nome, changed, "gPerse");
           if(s.includes("vinto")){
             const saleDay = dayOf(cfVal(o, "data vendita")) || changed;
             if(inR(saleDay)){
               C.add(nome, saleDay, "gVend");
-              const venduto = money(cfVal(o, "contrattualizzato")) || (+o.monetaryValue || 0);
+              const contr   = money(cfVal(o, "contrattualizzato"));
+              const venduto = contr || (+o.monetaryValue || 0);
               const cash    = money(cfVal(o, "cash collected"));
+              if(contr)   C.add(nome, saleDay, "gContr", contr);
               if(venduto) C.add(nome, saleDay, "gFatt", venduto);
               if(cash)    C.add(nome, saleDay, "gInc",  cash);
             }
@@ -338,14 +355,16 @@ async function teamFetchGHL(since, until, S, C, warn){
         if(se && inR(created)) S.add(se, created, "gFix");
       }
       else if(st.pipe.includes("setter")){
-        const nome = who && TEAM_SETTERS.includes(who) ? who : null;
-        if(!nome) continue;
+        /* pipeline di setting: la lavorano i setter MA ANCHE i closer full-stack */
         const s = st.stage;
-        if(inR(created)) S.add(nome, created, "gAss");
+        const tgt = who && TEAM_SETTERS.includes(who) ? { sh:S, nome:who }
+                  : who && TEAM_CLOSERS.includes(who) ? { sh:C, nome:who } : null;
+        if(!tgt) continue;
+        if(inR(created)) tgt.sh.add(tgt.nome, created, "gAss");
         const contattato = ["contattato","call 1","call 2","call 3","non interessato","non in target","semina","appuntamento fissato"].some(x => s.includes(x));
-        if(contattato && inR(changed)) S.add(nome, changed, "gCont");
-        if(s.includes("non interessato") && inR(changed)) S.add(nome, changed, "gNonInt");
-        if(s.includes("non in target")   && inR(changed)) S.add(nome, changed, "gNonTarget");
+        if(contattato && inR(changed)) tgt.sh.add(tgt.nome, changed, "gCont");
+        if(s.includes("non interessato") && inR(changed)) tgt.sh.add(tgt.nome, changed, "gNonInt");
+        if(s.includes("non in target")   && inR(changed)) tgt.sh.add(tgt.nome, changed, "gNonTarget");
       }
     }
     const m = j.meta || {};
